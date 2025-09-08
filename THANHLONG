@@ -1,0 +1,188 @@
+-- ESP + Small Toggle Button (LocalScript)
+-- Giữ nguyên logic cũ, chỉnh màu xanh đậm hơn, thêm Box ESP
+-- Name ESP lấy từ code dài (nền bo tròn + chữ rõ)
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local localPlayer = Players.LocalPlayer
+local uiRefreshInterval = 2
+local espEnabled = true
+
+-- Màu xanh đậm ESP
+local ESP_FILL_COLOR = Color3.fromRGB(0, 180, 80)
+local ESP_BOX_COLOR = Color3.fromRGB(0, 255, 100)
+
+local espStorage = {}
+
+-- UI: chỉ còn nút ON/OFF nhỏ gọn
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "ESPMenuGui"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = localPlayer:WaitForChild("PlayerGui")
+
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Size = UDim2.new(0,60,0,30)
+toggleBtn.Position = UDim2.new(0,50,0,80)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(30,30,30)
+toggleBtn.Text = "ON"
+toggleBtn.Font = Enum.Font.SourceSansBold
+toggleBtn.TextSize = 14
+toggleBtn.TextColor3 = Color3.fromRGB(230,230,230)
+toggleBtn.Parent = screenGui
+local btnCorner = Instance.new("UICorner", toggleBtn)
+btnCorner.CornerRadius = UDim.new(0,12)
+
+-- Drag button
+local dragging, dragStart, startPos = false, nil, nil
+toggleBtn.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		dragging = true
+		dragStart = input.Position
+		startPos = toggleBtn.Position
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then
+				dragging = false
+			end
+		end)
+	end
+end)
+
+RunService.RenderStepped:Connect(function()
+	if dragging and dragStart and startPos then
+		local mouse = game:GetService("UserInputService"):GetMouseLocation()
+		local delta = mouse - dragStart
+		toggleBtn.Position = UDim2.new(0, startPos.X.Offset + delta.X, 0, startPos.Y.Offset + delta.Y)
+	end
+end)
+
+-- Toggle behavior
+toggleBtn.MouseButton1Click:Connect(function()
+	espEnabled = not espEnabled
+	toggleBtn.Text = espEnabled and "ON" or "OFF"
+	for _, data in pairs(espStorage) do
+		if data.highlight then data.highlight.Enabled = espEnabled end
+		if data.billboard then data.billboard.Enabled = espEnabled end
+		if data.box then data.box.Visible = espEnabled end
+	end
+end)
+
+-- Billboard tên (copy từ code dài)
+local function createNameBillboard(character, playerName)
+	if not character then return nil end
+	local head = character:FindFirstChild("Head")
+	if not head then return nil end
+
+	if head:FindFirstChild("ESPNameBillboard") then
+		return head.ESPNameBillboard
+	end
+
+	local billboard = Instance.new("BillboardGui")
+	billboard.Name = "ESPNameBillboard"
+	billboard.AlwaysOnTop = true
+	billboard.Size = UDim2.new(0,140,0,36)
+	billboard.StudsOffset = Vector3.new(0,1.8,0)
+	billboard.Parent = head
+	billboard.Enabled = espEnabled
+
+	local bg = Instance.new("Frame", billboard)
+	bg.AnchorPoint = Vector2.new(0.5,0.5)
+	bg.Position = UDim2.new(0.5,0,0.5,0)
+	bg.Size = UDim2.new(1,0,1,0)
+	bg.BackgroundTransparency = 0.25
+	bg.BackgroundColor3 = Color3.fromRGB(20,20,20)
+	bg.BorderSizePixel = 0
+	local corner = Instance.new("UICorner", bg)
+	corner.CornerRadius = UDim.new(0,8)
+
+	local label = Instance.new("TextLabel", bg)
+	label.Size = UDim2.new(1,-8,1,-4)
+	label.Position = UDim2.new(0,4,0,2)
+	label.BackgroundTransparency = 1
+	label.Text = playerName
+	label.TextColor3 = Color3.fromRGB(230,230,230)
+	label.Font = Enum.Font.SourceSansBold
+	label.TextSize = 14
+	label.TextStrokeTransparency = 0.7
+	label.TextXAlignment = Enum.TextXAlignment.Center
+	label.TextYAlignment = Enum.TextYAlignment.Center
+
+	return billboard
+end
+
+-- Highlight xanh đậm
+local function createHighlight(character)
+	if character:FindFirstChild("ESPHighlight") then return character.ESPHighlight end
+	local hl = Instance.new("Highlight")
+	hl.Name = "ESPHighlight"
+	hl.Adornee = character
+	hl.Parent = character
+	hl.FillColor = ESP_FILL_COLOR
+	hl.FillTransparency = 0.2 -- đậm hơn
+	hl.OutlineTransparency = 0
+	hl.OutlineColor = Color3.fromRGB(0,0,0)
+	hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop -- hiển thị xuyên tường, chống tàng hình
+	hl.Enabled = espEnabled
+	return hl
+end
+
+-- Box ESP quanh HumanoidRootPart
+local function createBox(character)
+	local hrp = character:FindFirstChild("HumanoidRootPart")
+	if not hrp then return end
+	if hrp:FindFirstChild("ESPBox") then return hrp.ESPBox end
+
+	local box = Instance.new("BoxHandleAdornment")
+	box.Name = "ESPBox"
+	box.Size = hrp.Size + Vector3.new(2,3,1)
+	box.Color3 = ESP_BOX_COLOR
+	box.Transparency = 0.6
+	box.AlwaysOnTop = true
+	box.ZIndex = 0
+	box.Adornee = hrp
+	box.Parent = hrp
+	box.Visible = espEnabled
+	return box
+end
+
+-- Apply ESP
+local function applyESP(player)
+	if not player.Character then return end
+	local char = player.Character
+	local data = espStorage[player.UserId] or {}
+	data.highlight = createHighlight(char)
+	data.billboard = createNameBillboard(char, player.Name)
+	data.box = createBox(char)
+	espStorage[player.UserId] = data
+end
+
+local function removeESP(player)
+	local d = espStorage[player.UserId]
+	if not d then return end
+	if d.highlight then d.highlight:Destroy() end
+	if d.billboard then d.billboard:Destroy() end
+	if d.box then d.box:Destroy() end
+	espStorage[player.UserId] = nil
+end
+
+-- Refresh loop
+task.spawn(function()
+	while true do
+		if espEnabled then
+			for _, pl in pairs(Players:GetPlayers()) do
+				if pl ~= localPlayer and pl.Character then
+					applyESP(pl)
+				end
+			end
+		end
+		task.wait(uiRefreshInterval)
+	end
+end)
+
+Players.PlayerRemoving:Connect(removeESP)
+Players.PlayerAdded:Connect(function(pl)
+	pl.CharacterAdded:Connect(function()
+		task.wait(0.5)
+		if espEnabled then applyESP(pl) end
+	end)
+end)
